@@ -1,3 +1,6 @@
+
+# setup -------------------------------------------------------------------
+
 # check if packages are installed and load
 packages = c("httr", "jsonlite",
              "dplyr", "tidyr","stringr",
@@ -29,10 +32,9 @@ if(file.exists("tmdb_query_config.csv")==T){
   
   write.csv2(tmdb_query_config, "tmdb_query_config.csv", row.names = F)
   
-  # TODO possible minor issue: dir separator os-specific
+  # TODO possible minor issue: os-specific dir separator 
   config_fp <- paste0("created ",getwd(),"/tmdb_query_config.csv")
   print(config_fp)
-  
   }
 
 if(str_length(api_key)!=32){
@@ -45,7 +47,17 @@ if(str_length(api_key)!=32){
 existing_cache <- "tmdb_db.csv"
 
 if(file.exists(existing_cache)==T){
+  
+  # TODO rename
+  # read cache and filter NA
   existing_cache2 <- read.csv2(existing_cache)
+  
+  existing_cache2 <- existing_cache2 %>%
+    filter(tmdb_title %in% NA) %>%
+    select(cache_dirname, cache_title)
+  
+  names(existing_cache2) <- c("cache_dir","cache_title")
+  
 } else {
   print("no existing cache found in this working directory")
   print("building a new one")
@@ -53,20 +65,21 @@ if(file.exists(existing_cache)==T){
 
 # directories to title and year df ----------------------------------------
 
-# get directories
-movie_list <- as.data.frame(list.dirs(full.names = F,recursive = F)) 
-names(movie_list) <- "cache_movie"
+# get directories with path
+dir <- as.data.frame(list.dirs(full.names = F,recursive = F))
+dir_path <- as.data.frame(list.dirs(recursive = F))
+movie_list <- cbind(dir,dir_path)
+names(movie_list)<-c("cache_dir","cache_dirpath")
 
-# get paths 
-dir_list <- as.data.frame(list.dirs(recursive = F))
-names(dir_list)<-"cache_dirname"
+# TODO create diff with missing entries, changed dir names
+# right_join(movie_list, existing_cache2, by="cache_dir")
 
 # my movies go like this: moviename (year) (subtitles)
 movie_list <- movie_list %>%
-  mutate(w1 = word(cache_movie,-1), # extracting word by word, 
-         w2 = word(cache_movie,-2), # there is probably a regex for this
+  mutate(w1 = word(cache_dir,-1), # extracting word by word, 
+         w2 = word(cache_dir,-2), # there is probably a regex for this
          toBeRemoved = str_length(paste0(w1,w2))+2, 
-         cache_title = substr(cache_movie,0, str_length(cache_movie)-toBeRemoved), # get title
+         cache_title = substr(cache_dir,0, str_length(cache_dir)-toBeRemoved), # get title
          cache_year = as.numeric(gsub("\\(|\\)","",w2)),
          cache_audsub = gsub("\\(|\\)","",w1)) %>%
   select(-w1,-w2,-toBeRemoved) %>%
@@ -126,7 +139,7 @@ for (i in 1:j) {
   if(n==0 | is.null(n)){
     print(paste0("No results found for: ",movie_list$cache_title[i],", year: ",year, ", id: ",i))
     
-    movies_not_found <- rbind(movie_list[i,c("cache_dirname", "cache_title")],movies_not_found)
+    movies_not_found <- rbind(movie_list[i,c("cache_dirpath", "cache_title")],movies_not_found)
     next
     
   } else if(n>= 1){
@@ -152,5 +165,6 @@ for (i in 1:j) {
 remove(n, i, j, url1, url2, title, year)
 
 # write new cache to disk
-new_cache <- merge(tmdb_list, movies_not_found, by = c("cache_dirname", "cache_title"),all = T)
+new_cache <- merge(tmdb_list, movies_not_found, by = c("cache_dirpath", "cache_title"),all = T)
 write.csv2(new_cache, "tmdb_db.csv", row.names = F)
+
